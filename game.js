@@ -15,8 +15,8 @@
   const AGES = {
     // grow=每幾發從頂端游來新一排(0=不長);guide=瞄準虛線長度(青檔更短,要自己抓角度)
     young: { label: '🐣 幼', desc: '3 種魚・3 排', kinds: 3, rows: 3, cols: 8, grow: 0, guide: 150 },
-    kid: { label: '🙂 童', desc: '4 種魚・4 排', kinds: 4, rows: 4, cols: 9, grow: 9, guide: 130 },
-    teen: { label: '🔥 青', desc: '5 種・魚越聚越多', kinds: 5, rows: 5, cols: 10, grow: 6, guide: 70 },
+    kid: { label: '🙂 童', desc: '4 種魚・4 排', kinds: 4, rows: 4, cols: 9, grow: 11, maxGrow: 8, guide: 130 },
+    teen: { label: '🔥 青', desc: '5 種・魚越聚越多', kinds: 5, rows: 5, cols: 10, grow: 8, maxGrow: 12, guide: 70 },
   }
 
   const KINDS = ['bluefish', 'goldfish', 'redfish', 'grayfish', 'greenfish']
@@ -37,6 +37,7 @@
     float: '離了群的,主也數算…',
     more: '又有魚群游過來了…',
     low: '主親自把下層的魚收進網…',
+    growStop: '網已經滿了——魚不再游進來(約 21:11)',
     closeLine: '魚雖這樣多，網卻沒有破。(約 21:11)',
     winTitle: '🎉 網滿了,拉上岸!',
     winVerse: '那網滿了大魚，共一百五十三條；魚雖這樣多，網卻沒有破。',
@@ -146,6 +147,7 @@
       this.cur = this._pick()
       this.next = this._pick()
       this.aim = -Math.PI / 2
+      this.growCount = 0; this.growStopped = false; this.startGT = this._t
       this.state = 'play'
       this.startT = performance.now()
       this._voice('intro')
@@ -179,6 +181,12 @@
 
     _growRow() {
       if (this.state !== 'play' || this.grid.size === 0) return
+      // 「夠用就攔住」(07-23 平衡修):加壓批次有限/場上將清/超時=不再長排——弱手也一定打得完
+      if ((this.growCount || 0) >= (this.cfg.maxGrow || 99) || this.grid.size <= 8 || (this._t - (this.startGT || 0)) > 180) {
+        if (!this.growStopped) { this.growStopped = true; this.toasts.push({ text: T.growStop, t: this._t }) }
+        return
+      }
+      this.growCount = (this.growCount || 0) + 1
       const shifted = new Map()
       for (const [key, kind] of this.grid) {
         const [r, c] = key.split(',').map(Number)
