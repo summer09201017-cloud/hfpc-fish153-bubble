@@ -1,0 +1,13 @@
+{
+  "name": "網滿大魚・一五三",
+  "short_name": "網滿大魚",
+  "description": "瞄準發射,把魚送到同類旁邊——湊滿 3 條一起游進網裡!共一百五十三條,網卻沒有破(約翰福音 21,和合本)",
+  "start_url": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#4a7a9c",
+  "theme_color": "#1c3a50",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

@@ -1,0 +1,7 @@
+.git
+.wrangler
+.gitignore
+.assetsignore
+scripts
+README.md
+wrangler-account.json
