@@ -5,7 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 const CANDIDATES = [
-  path.join(os.homedir(), 'Downloads', 'hfpc-git', '_paul-wt', 'node_modules'),
+  path.join(os.homedir(), 'Downloads', 'hfpc-git', 'hfpc-paul-game', 'node_modules'),
   path.join(os.homedir(), 'Desktop', 'horsearchery3d', 'node_modules'),
   path.join(os.homedir(), 'Desktop', 'redsea3d', 'node_modules'),
 ];
