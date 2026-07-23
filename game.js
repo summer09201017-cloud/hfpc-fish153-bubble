@@ -76,6 +76,8 @@
       this.stars = {}
       this.lastStars = 1
       this._mapBtns = []
+      this.shocks = [] // 💥 大串消除衝擊波光環
+      this.sparks = [] // 💥 煙火
       this._onDown = (e) => this._down(e)
       this._onMove = (e) => this._movePt(e)
       this._onUp = (e) => this._up(e)
@@ -166,6 +168,7 @@
       this.next = this._pick()
       this.aim = -Math.PI / 2
       this.growCount = 0; this.growStopped = false; this.startGT = this._t
+      this.shocks = []; this.sparks = []
       this.state = 'play'
       this.startT = performance.now()
       this._voice('intro')
@@ -265,6 +268,19 @@
       }
       if (group.length >= 3) {
         for (const [gr, gc] of group) this._toNet(gr, gc)
+        // 💥 大串消除(≥4)=擴散衝擊波光環+煙火(07-24,連鏈家族同款精神)
+        if (group.length >= 4) {
+          let cx = 0, cy = 0
+          for (const [gr2, gc2] of group) { const p2 = this._cellXY(gr2, gc2); cx += p2.x; cy += p2.y }
+          cx /= group.length; cy /= group.length
+          this.shocks.push({ x: cx, y: cy, t: 0 })
+          const FW = ['#ffd54a', '#ff8a5a', '#8ae08a', '#7ab8ff', '#e08ae0']
+          const N = Math.min(40, group.length * 8)
+          for (let i = 0; i < N; i++) {
+            const a = Math.random() * Math.PI * 2, v = 90 + Math.random() * 220
+            this.sparks.push({ x: cx, y: cy, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 60, t: 0, color: FW[i % 5] })
+          }
+        }
         this.toasts.push({ text: T.gather, t: this._t })
         this._tone(523, 0.12, 0, 'triangle', 0.11); this._tone(659, 0.18, 0.1, 'triangle', 0.11)
         // 離了群的(沒連到頂排)=主也數算
@@ -333,6 +349,10 @@
         else if (b.y > VH + 40) this.flying = null
       }
       for (const f of this.flyers) f.t += dt * 1.4
+      for (const sfx of this.shocks) sfx.t += dt * 1.8
+      this.shocks = this.shocks.filter((sfx) => sfx.t < 1)
+      for (const sp of this.sparks) { sp.t += dt; sp.x += sp.vx * dt; sp.y += sp.vy * dt; sp.vy += 260 * dt }
+      this.sparks = this.sparks.filter((sp) => sp.t < 0.9)
       for (const f of this.flyers) {
         const k = Math.min(1, f.t)
         const ease = k * k * (3 - 2 * k)
@@ -508,6 +528,22 @@
       }
       if (this.flying) this._fish(this.flying.x, this.flying.y, D / 2 - 2, this.flying.kind)
       for (const f of this.flyers) this._fish(f.x, f.y, (D / 2 - 2) * (1 - f.t * 0.3), f.kind)
+      // 💥 衝擊波光環(雙圈擴散)+煙火
+      for (const sfx of this.shocks) {
+        const k = sfx.t
+        ctx.globalAlpha = (1 - k) * 0.9
+        ctx.strokeStyle = '#ffd54a'; ctx.lineWidth = 6 * (1 - k) + 2
+        ctx.beginPath(); ctx.arc(sfx.x, sfx.y, 24 + k * 260, 0, 7); ctx.stroke()
+        ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 3
+        ctx.beginPath(); ctx.arc(sfx.x, sfx.y, 12 + k * 180, 0, 7); ctx.stroke()
+        ctx.globalAlpha = 1
+      }
+      for (const sp of this.sparks) {
+        ctx.globalAlpha = Math.max(0, 1 - sp.t / 0.9)
+        ctx.fillStyle = sp.color
+        ctx.beginPath(); ctx.arc(sp.x, sp.y, 3.2, 0, 7); ctx.fill()
+        ctx.globalAlpha = 1
+      }
       // 發射台(彼得)
       if (this.state === 'play') {
         const sx = VW / 2, sy = VH - 70
