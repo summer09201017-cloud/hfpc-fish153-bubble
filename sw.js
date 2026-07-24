@@ -1,4 +1,4 @@
-var CACHE_NAME = 'fish153-bubble-v5';
+var CACHE_NAME = 'fish153-bubble-v6';
 var SHELL = ['./', './index.html', './game.js', './manifest.webmanifest',
              './voice/intro.mp3', './voice/bless.mp3', './voice/win.mp3'];
 self.addEventListener('install', function(e){

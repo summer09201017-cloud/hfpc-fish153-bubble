@@ -495,6 +495,22 @@
       return { s, ox: (this.W - VW * s) / 2, oy: (this.H - VH * s) / 2 }
     }
 
+    // ☀️ 柔光暈太陽(07-24 使用者點名:白天 candy 全配;十童女夜景除外)
+    _sun() {
+      const { ctx } = this
+      const x = 78, y = 72
+      const halo = ctx.createRadialGradient(x, y, 6, x, y, 84)
+      halo.addColorStop(0, 'rgba(255,238,160,0.5)')
+      halo.addColorStop(0.55, 'rgba(255,232,150,0.16)')
+      halo.addColorStop(1, 'rgba(255,230,140,0)')
+      ctx.fillStyle = halo
+      ctx.beginPath(); ctx.arc(x, y, 84, 0, 7); ctx.fill()
+      const core = ctx.createRadialGradient(x - 5, y - 5, 3, x, y, 26)
+      core.addColorStop(0, '#fffbe8'); core.addColorStop(1, '#ffd75e')
+      ctx.fillStyle = core
+      ctx.beginPath(); ctx.arc(x, y, 26, 0, 7); ctx.fill()
+    }
+
     _draw() {
       const { ctx, W, H } = this
       if (!W) return
@@ -505,6 +521,7 @@
       const { s, ox, oy } = this._view()
       ctx.save()
       ctx.setTransform(s, 0, 0, s, ox, oy)
+      this._sun()
       // 海面微波
       ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 2
       for (let i = 0; i < 5; i++) {
