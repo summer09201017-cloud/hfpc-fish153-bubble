@@ -94,6 +94,9 @@
       this.confetti = []
       this.startT = 0
       this._audio = null
+      this._bgmOn = false; this._bgmMuted = false; this._bgmGain = null; this._bgmNext = 0; this._bgmStep = 0
+      this._bgmCfg = { vol: 0.9, type: 'triangle', step: 0.3, scale: [261.63,293.66,329.63,392,440,523.25,587.33,659.25], bass: [130.81,196], bassEvery: 8, btnBg: 'rgba(28,48,72,0.5)', btnFg: '#eaf2f8' }
+      try { this._bgmMuted = localStorage.getItem('bgm-muted') === '1' } catch {}
       this._voiceEl = null
       this.canFS = !!document.documentElement.requestFullscreen
       this.reduced = matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -130,6 +133,7 @@
       removeEventListener('resize', this._onResize)
       document.removeEventListener('fullscreenchange', this._onResize)
       try { this._voiceEl && this._voiceEl.pause() } catch {}
+      this._bgmOn = false
       try { this._audio && this._audio.close() } catch {}
     }
 
@@ -138,7 +142,9 @@
         if (this._voiceEl) this._voiceEl.pause()
         this._voiceEl = new Audio(VOICES[key])
         this._voiceEl.volume = 1
-        this._voiceEl.play().catch(() => {})
+        this._bgmDuck(true)
+        this._voiceEl.onended = this._voiceEl.onpause = () => this._bgmDuck(false)
+        this._voiceEl.play().catch(() => this._bgmDuck(false))
       } catch {}
     }
 
@@ -328,6 +334,7 @@
     }
 
     _update(dt) {
+      this._bgmTick()
       if (this.state === 'close') {
         this.closeT -= dt
         if (this.closeT <= 0) this._win()
@@ -420,6 +427,9 @@
     }
     _down(e) {
       const { x, y } = this._pt(e)
+      this._bgmStart() // 首次互動啟動背景音樂(自動播放政策)
+      // 🎵 音樂開關鈕(全螢幕鈕左邊,不受 canFS 限制)
+      if (x >= VW - 86 && x <= VW - 50 && y >= 8 && y <= 44) { this._bgmToggle(); return }
       if (this.canFS && x >= VW - 46 && x <= VW - 10 && y >= 8 && y <= 44) {
         try {
           if (document.fullscreenElement) document.exitFullscreen()
@@ -465,6 +475,89 @@
     _up() {
       if (this._press && this.state === 'play') this._shoot()
       this._press = false
+    }
+
+    // ══════════════════ 背景音樂(程序化・零音檔・可離線)══════════════════
+    // 溫和五聲音階迴圈,語音旁白時自動壓低;🎵 鈕可靜音(記 localStorage)。首次點擊才啟動(瀏覽器自動播放政策)
+    _bgmStart() {
+      if (this._bgmOn || this._bgmMuted) return
+      try {
+        if (!this._audio) this._audio = new (window.AudioContext || window.webkitAudioContext)()
+        if (this._audio.state === 'suspended') this._audio.resume()
+        if (!this._bgmGain) {
+          this._bgmGain = this._audio.createGain()
+          this._bgmGain.connect(this._audio.destination)
+        }
+        this._bgmGain.gain.value = this._bgmCfg.vol
+        this._bgmOn = true
+        this._bgmNext = this._audio.currentTime + 0.12
+        this._bgmStep = 0
+      } catch {}
+    }
+    _bgmTick() {
+      if (!this._bgmOn || this._bgmMuted || !this._audio) return
+      const cfg = this._bgmCfg, ctx = this._audio
+      const MEL = [0,2,4,2, 5,4,2,0, 3,2,0,2, 4,5,4,-1, 0,2,4,7, 5,4,2,-1, 3,5,4,2, 0,-1,0,-1]
+      const ahead = ctx.currentTime + 0.45
+      let guard = 0
+      while (this._bgmNext < ahead && guard++ < 64) {
+        const i = MEL[this._bgmStep % MEL.length]
+        if (i >= 0) this._bgmNote(cfg.scale[i], cfg.step * 0.92, this._bgmNext, cfg.type, 0.09)
+        if (cfg.bass && this._bgmStep % cfg.bassEvery === 0) {
+          const bi = Math.floor(this._bgmStep / cfg.bassEvery) % cfg.bass.length
+          this._bgmNote(cfg.bass[bi], cfg.step * cfg.bassEvery * 0.9, this._bgmNext, 'sine', 0.06)
+        }
+        this._bgmNext += cfg.step
+        this._bgmStep++
+      }
+    }
+    _bgmNote(freq, dur, at, type, peak) {
+      try {
+        const ctx = this._audio
+        const o = ctx.createOscillator(), g = ctx.createGain()
+        o.type = type; o.frequency.value = freq
+        g.gain.setValueAtTime(0.0001, at)
+        g.gain.exponentialRampToValueAtTime(peak, at + 0.05)
+        g.gain.exponentialRampToValueAtTime(0.0001, at + dur)
+        o.connect(g).connect(this._bgmGain)
+        o.start(at); o.stop(at + dur + 0.05)
+      } catch {}
+    }
+    _bgmToggle() {
+      this._bgmMuted = !this._bgmMuted
+      try { localStorage.setItem('bgm-muted', this._bgmMuted ? '1' : '0') } catch {}
+      if (this._bgmMuted) {
+        this._bgmOn = false
+        try { if (this._bgmGain) this._bgmGain.gain.value = 0 } catch {}
+      } else {
+        this._bgmStart()
+      }
+    }
+    _bgmDuck(on) {
+      if (this._bgmMuted || !this._bgmGain || !this._audio) return
+      try {
+        const t = this._audio.currentTime
+        this._bgmGain.gain.cancelScheduledValues(t)
+        this._bgmGain.gain.setValueAtTime(this._bgmGain.gain.value, t)
+        this._bgmGain.gain.linearRampToValueAtTime(on ? this._bgmCfg.vol * 0.3 : this._bgmCfg.vol, t + 0.3)
+      } catch {}
+    }
+    _musicBtn() {
+      const { ctx } = this
+      const bx = VW - 84, by = 10
+      ctx.fillStyle = this._bgmCfg.btnBg
+      ctx.beginPath(); ctx.roundRect ? ctx.roundRect(bx, by, 32, 32, 8) : ctx.rect(bx, by, 32, 32); ctx.fill()
+      ctx.strokeStyle = this._bgmCfg.btnFg; ctx.fillStyle = this._bgmCfg.btnFg; ctx.lineWidth = 2.5
+      ctx.beginPath(); ctx.ellipse(bx + 10, by + 22, 4.2, 3.2, -0.3, 0, 7); ctx.fill()
+      ctx.beginPath(); ctx.ellipse(bx + 20, by + 20, 4.2, 3.2, -0.3, 0, 7); ctx.fill()
+      ctx.lineWidth = 2.2
+      ctx.beginPath(); ctx.moveTo(bx + 13.8, by + 22); ctx.lineTo(bx + 13.8, by + 9); ctx.stroke()
+      ctx.beginPath(); ctx.moveTo(bx + 23.8, by + 20); ctx.lineTo(bx + 23.8, by + 8); ctx.stroke()
+      ctx.beginPath(); ctx.moveTo(bx + 13.8, by + 9); ctx.lineTo(bx + 23.8, by + 8); ctx.stroke()
+      if (this._bgmMuted) {
+        ctx.strokeStyle = '#e8524a'; ctx.lineWidth = 3
+        ctx.beginPath(); ctx.moveTo(bx + 6, by + 7); ctx.lineTo(bx + 26, by + 25); ctx.stroke()
+      }
     }
 
     _tone(freq, dur, delay = 0, type = 'triangle', vol = 0.14) {
@@ -615,6 +708,7 @@
     }
 
     _fsBtn() {
+      this._musicBtn()
       if (!this.canFS) return
       const { ctx } = this
       ctx.fillStyle = 'rgba(28,48,72,0.5)'
