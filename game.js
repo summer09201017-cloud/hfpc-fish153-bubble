@@ -96,6 +96,7 @@
       this._audio = null
       this._bgmOn = false; this._bgmMuted = false; this._bgmGain = null; this._bgmNext = 0; this._bgmStep = 0
       this._bgmCfg = { vol: 0.9, type: 'triangle', step: 0.3, scale: [523.26,587.32,659.26,784,880,1046.5,1174.66,1318.5], bass: [130.81,196], bassEvery: 8, btnBg: 'rgba(28,48,72,0.5)', btnFg: '#eaf2f8' }
+      this._bgmSeed(0)   // 開場(選單)也有自己的一首
       try { this._bgmMuted = localStorage.getItem('bgm-muted') === '1' } catch {}
       this._voiceEl = null
       this.canFS = !!document.documentElement.requestFullscreen
@@ -156,6 +157,7 @@
       this.age = age
       this.cfg = AGES[age]
       this.level = forceLv || maxLevel(age)
+      this._bgmSeed(this.level)   // ★ BGM 百曲庫 0726:每一關不同曲
       this.stars = loadStars(age)
       this.lvRows = Math.min(6, this.cfg.rows + Math.floor((this.level - 1) / 2))
       this.lvMaxGrow = (this.cfg.maxGrow || 0) ? this.cfg.maxGrow + Math.min(8, (this.level - 1) * 2) : 0
@@ -496,15 +498,34 @@
     }
     // ★ BGM 可聽度修正 0726:實測原設定 RMS −36.5 dBFS、能量最強 188 Hz(手機喇叭放不出來)→
     //   旋律升八度 + 三角波 + 音量拉高;低音壓低(手機本來就放不出低音)。
+
+    // ★ BGM 百曲庫 0726(使用者拍板:94 站不同曲、每一關也不同曲):曲子由(站名,關卡)雜湊決定,
+    //   同一關永遠同一首、不同關/不同站一定不同首;音域 330Hz+(手機喇叭放得出來)。
+    _bgmSeed(lv) {
+      const SC = [[523.25,587.33,659.25,783.99,880],[440,523.25,587.33,659.25,783.99],[392,440,493.88,587.33,659.25],[349.23,392,440,523.25,587.33],[587.33,659.25,739.99,880,987.77],[329.63,392,440,493.88,587.33],[466.16,523.25,587.33,698.46,783.99],[415.3,466.16,554.37,622.25,739.99]]
+      const PT = [[0,1,2,3,4,3,2,1],[0,2,4,2,1,3,2,0],[4,3,2,1,0,1,2,3],[0,0,2,2,4,4,2,-1],[0,2,1,3,2,4,3,-1],[4,2,0,2,4,2,1,0],[0,3,1,4,2,0,3,-1],[2,4,2,0,1,3,4,2]]
+      let x = 2166136261; const s = 'hfpc-fish153-bubble|' + (lv || 1)
+      for (let i = 0; i < s.length; i++) { x ^= s.charCodeAt(i); x = Math.imul(x, 16777619) >>> 0 }
+      const mul = [1, 1.122, 0.891][(x >>> 13) % 3]
+      const cfg = this._bgmCfg
+      cfg.scale = SC[x % 8].map((f) => +(f * mul).toFixed(2))
+      cfg.step = [0.3, 0.36, 0.42, 0.5][(x >>> 9) % 4]
+      cfg.type = ['triangle', 'square', 'sine'][(x >>> 11) % 3]
+      cfg.bass = [+(cfg.scale[0] / 2).toFixed(2), +(cfg.scale[3] / 2).toFixed(2)]
+      this._bgmMel = PT[(x >>> 3) % 8].concat(PT[(x >>> 6) % 8])
+      this._bgmVol = cfg.type === 'square' ? 0.24 : cfg.type === 'sine' ? 0.5 : 0.4
+      this._bgmStep = 0
+    }
+
     _bgmTick() {
       if (!this._bgmOn || this._bgmMuted || !this._audio) return
       const cfg = this._bgmCfg, ctx = this._audio
-      const MEL = [0,2,4,2, 5,4,2,0, 3,2,0,2, 4,5,4,-1, 0,2,4,7, 5,4,2,-1, 3,5,4,2, 0,-1,0,-1]
+      const MEL = this._bgmMel || [0,2,4,2, 5,4,2,0, 3,2,0,2, 4,5,4,-1, 0,2,4,7, 5,4,2,-1, 3,5,4,2, 0,-1,0,-1]
       const ahead = ctx.currentTime + 0.45
       let guard = 0
       while (this._bgmNext < ahead && guard++ < 64) {
         const i = MEL[this._bgmStep % MEL.length]
-        if (i >= 0) this._bgmNote(cfg.scale[i], cfg.step * 0.92, this._bgmNext, cfg.type, 0.4)
+        if (i >= 0) this._bgmNote(cfg.scale[i], cfg.step * 0.92, this._bgmNext, cfg.type, this._bgmVol || 0.4)
         if (cfg.bass && this._bgmStep % cfg.bassEvery === 0) {
           const bi = Math.floor(this._bgmStep / cfg.bassEvery) % cfg.bass.length
           this._bgmNote(cfg.bass[bi], cfg.step * cfg.bassEvery * 0.9, this._bgmNext, 'sine', 0.02)
